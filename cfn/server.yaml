@@ -1,0 +1,111 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Creates EC2 instance, permissions, and security group.
+
+
+Parameters:
+  DemoProjectVPC:
+    Type: AWS::EC2::VPC::Id
+    Description: Enter VPC id
+
+  DemoProjectSubnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: Enter Subnet id
+
+  DemoProjectInstanceKeyPair:
+    Type: String
+    Description: Enter keypair for EC2 instance 
+
+  DemoProjectInstanceType:
+    Type: String
+    Default: t2.micro
+    Description: Enter desired EC2 instance type
+
+  DemoProjectInstanceAMI:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Description: Enter desired AMIID for latest amazon image
+    Default: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+
+
+Resources:
+  DempProjectEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Demo SG 
+      GroupName: demo-project-ec2-security-group
+      VpcId: !Ref DemoProjectVPC
+      SecurityGroupIngress: 
+        - CidrIp: 0.0.0.0/0
+          Description: SSH
+          FromPort: 22
+          IpProtocol: tcp
+          ToPort: 22
+        - CidrIp: 0.0.0.0/0
+          Description: SSH
+          FromPort: 80
+          IpProtocol: tcp
+          ToPort: 80
+        - CidrIp: 0.0.0.0/0
+          Description: SSH
+          FromPort: 443
+          IpProtocol: tcp
+          ToPort: 443
+      Tags:
+        - Key: Name
+          Value: DempProjectEC2SecurityGroup
+
+  DemoProjectEC2Role:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: Allow
+            Principal: 
+              Service: 
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Name
+          Value: DemoLambdaRole
+
+  DemoProjectEC2Policy:
+    Type: AWS::IAM::Policy
+    DependsOn: DemoProjectEC2Role
+    Properties: 
+      PolicyName: demo-project-ec2-policy
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Action: "ec2:*"
+            Resource: "*"
+      Roles: 
+        - !Ref DemoProjectEC2Role
+  
+  DemoInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    DependsOn: DemoProjectEC2Policy
+    Properties: 
+      Roles: 
+        - !Ref DemoProjectEC2Role
+
+  DemoProjectEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref DemoProjectInstanceKeyPair
+      ImageId: !Ref DemoProjectInstanceAMI
+      InstanceType: !Ref DemoProjectInstanceType
+      IamInstanceProfile: !Ref DemoInstanceProfile
+      SubnetId: !Ref DemoProjectSubnet
+      SecurityGroupIds:
+        - !GetAtt DempProjectEC2SecurityGroup.GroupId
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -x
+          yum update -y
+          amazon-linux-extras install nginx1.12 -y
+      Tags: 
+        - Key: Name
+          Value: DemoProjectEC2
